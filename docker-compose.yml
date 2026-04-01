@@ -1,0 +1,8 @@
+services:
+  ticker:
+    image: ghcr.io/stockyard-dev/stockyard-ticker:latest
+    ports: ["9020:9020"]
+    volumes: [ticker-data:/data]
+    restart: unless-stopped
+volumes:
+  ticker-data:
