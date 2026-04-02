@@ -1,109 +1,19 @@
 package server
-
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-
-	"github.com/stockyard-dev/stockyard-ticker/internal/store"
-)
-
-type Server struct {
-	db     *store.DB
-	mux    *http.ServeMux
-	port   int
-	limits Limits
-}
-
-func New(db *store.DB, port int, limits Limits) *Server {
-	s := &Server{db: db, mux: http.NewServeMux(), port: port, limits: limits}
-	s.mux.HandleFunc("POST /api/accounts", s.hCreateAcct)
-	s.mux.HandleFunc("GET /api/accounts", s.hListAccts)
-	s.mux.HandleFunc("DELETE /api/accounts/{id}", s.hDelAcct)
-	s.mux.HandleFunc("POST /api/transactions", s.hAddTxn)
-	s.mux.HandleFunc("GET /api/transactions", s.hListTxns)
-	s.mux.HandleFunc("DELETE /api/transactions/{id}", s.hDelTxn)
-	s.mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) { wj(w, 200, s.db.Stats()) })
-	s.mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { wj(w, 200, map[string]string{"status": "ok"}) })
-	s.mux.HandleFunc("GET /ui", s.handleUI)
-	s.mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
-		wj(w, 200, map[string]any{"product": "stockyard-ticker", "version": "0.1.0"})
-	})
-	return s
-}
-
-func (s *Server) Start() error {
-	log.Printf("[ticker] :%d", s.port)
-	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), s.mux)
-}
-
-func (s *Server) hCreateAcct(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name     string `json:"name"`
-		Type     string `json:"type"`
-		Currency string `json:"currency"`
-	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil || req.Name == "" {
-		wj(w, 400, map[string]string{"error": "name required"})
-		return
-	}
-	a, err := s.db.CreateAccount(req.Name, req.Type, req.Currency)
-	if err != nil {
-		wj(w, 500, map[string]string{"error": err.Error()})
-		return
-	}
-	wj(w, 201, map[string]any{"account": a})
-}
-
-func (s *Server) hListAccts(w http.ResponseWriter, r *http.Request) {
-	a, _ := s.db.ListAccounts()
-	if a == nil {
-		a = []store.Account{}
-	}
-	wj(w, 200, map[string]any{"accounts": a, "count": len(a)})
-}
-
-func (s *Server) hDelAcct(w http.ResponseWriter, r *http.Request) {
-	s.db.DeleteAccount(r.PathValue("id"))
-	wj(w, 200, map[string]string{"status": "deleted"})
-}
-
-func (s *Server) hAddTxn(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		AccountID   string `json:"account_id"`
-		Description string `json:"description"`
-		AmountCents int    `json:"amount_cents"`
-		Category    string `json:"category"`
-		Date        string `json:"date"`
-	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil || req.AccountID == "" || req.Description == "" {
-		wj(w, 400, map[string]string{"error": "account_id and description required"})
-		return
-	}
-	t, err := s.db.AddTransaction(req.AccountID, req.Description, req.AmountCents, req.Category, req.Date)
-	if err != nil {
-		wj(w, 500, map[string]string{"error": err.Error()})
-		return
-	}
-	wj(w, 201, map[string]any{"transaction": t})
-}
-
-func (s *Server) hListTxns(w http.ResponseWriter, r *http.Request) {
-	t, _ := s.db.ListTransactions(r.URL.Query().Get("account_id"), 50)
-	if t == nil {
-		t = []store.Transaction{}
-	}
-	wj(w, 200, map[string]any{"transactions": t, "count": len(t)})
-}
-
-func (s *Server) hDelTxn(w http.ResponseWriter, r *http.Request) {
-	s.db.DeleteTransaction(r.PathValue("id"))
-	wj(w, 200, map[string]string{"status": "deleted"})
-}
-
-func wj(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(v)
-}
+import ("encoding/json";"log";"net/http";"github.com/stockyard-dev/stockyard-ticker/internal/store")
+type Server struct{db *store.DB;mux *http.ServeMux}
+func New(db *store.DB)*Server{s:=&Server{db:db,mux:http.NewServeMux()}
+s.mux.HandleFunc("GET /api/prices",s.list);s.mux.HandleFunc("POST /api/prices",s.create);s.mux.HandleFunc("GET /api/prices/{id}",s.get);s.mux.HandleFunc("DELETE /api/prices/{id}",s.del)
+s.mux.HandleFunc("GET /api/stats",s.stats);s.mux.HandleFunc("GET /api/health",s.health)
+s.mux.HandleFunc("GET /ui",s.dashboard);s.mux.HandleFunc("GET /ui/",s.dashboard);s.mux.HandleFunc("GET /",s.root);return s}
+func(s *Server)ServeHTTP(w http.ResponseWriter,r *http.Request){s.mux.ServeHTTP(w,r)}
+func wj(w http.ResponseWriter,c int,v any){w.Header().Set("Content-Type","application/json");w.WriteHeader(c);json.NewEncoder(w).Encode(v)}
+func we(w http.ResponseWriter,c int,m string){wj(w,c,map[string]string{"error":m})}
+func(s *Server)root(w http.ResponseWriter,r *http.Request){if r.URL.Path!="/"{http.NotFound(w,r);return};http.Redirect(w,r,"/ui",302)}
+func(s *Server)list(w http.ResponseWriter,r *http.Request){wj(w,200,map[string]any{"prices":oe(s.db.List())})}
+func(s *Server)create(w http.ResponseWriter,r *http.Request){var e store.Price;json.NewDecoder(r.Body).Decode(&e);if e.Symbol==""{we(w,400,"symbol required");return};s.db.Create(&e);wj(w,201,s.db.Get(e.ID))}
+func(s *Server)get(w http.ResponseWriter,r *http.Request){e:=s.db.Get(r.PathValue("id"));if e==nil{we(w,404,"not found");return};wj(w,200,e)}
+func(s *Server)del(w http.ResponseWriter,r *http.Request){s.db.Delete(r.PathValue("id"));wj(w,200,map[string]string{"deleted":"ok"})}
+func(s *Server)stats(w http.ResponseWriter,r *http.Request){wj(w,200,map[string]int{"prices":s.db.Count()})}
+func(s *Server)health(w http.ResponseWriter,r *http.Request){wj(w,200,map[string]any{"status":"ok","service":"ticker","prices":s.db.Count()})}
+func oe[T any](s []T)[]T{if s==nil{return[]T{}};return s}
+func init(){log.SetFlags(log.LstdFlags|log.Lshortfile)}
