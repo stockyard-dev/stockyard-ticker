@@ -32,6 +32,7 @@ func(s *Server)update(w http.ResponseWriter,r *http.Request){
 patch.Symbol=existing.Symbol};if patch.Exchange==""{
 patch.Exchange=existing.Exchange};if patch.Status==""{
 patch.Status=existing.Status}
+    if patch.Price==0{patch.Price=existing.Price};if patch.Change==0{patch.Change=existing.Change};if patch.Volume==0{patch.Volume=existing.Volume};if patch.High==0{patch.High=existing.High};if patch.Low==0{patch.Low=existing.Low}
     s.db.Update(&patch);wj(w,200,s.db.Get(patch.ID))
 }
 func(s *Server)del(w http.ResponseWriter,r *http.Request){s.db.Delete(r.PathValue("id"));wj(w,200,map[string]string{"deleted":"ok"})}
